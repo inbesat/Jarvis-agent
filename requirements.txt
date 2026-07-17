@@ -1,0 +1,11 @@
+edge-tts
+pygame
+SpeechRecognition
+pyautogui
+pywinauto
+pyperclip
+psutil
+requests
+python-dotenv
+groq
+flask

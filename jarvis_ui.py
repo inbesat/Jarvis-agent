@@ -1767,11 +1767,11 @@ def rgb_to_hex(r, g, b):
 
 
 STATE_PALETTES = {
-    "idle":      {"primary": "#1B5E20", "secondary": "#2E7D32", "core": "#FFD600", "accent": "#003300", "speed": 0.3, "amp": 2},
-    "listening": {"primary": "#1565C0", "secondary": "#0D47A1", "core": "#82B1FF", "accent": "#002171", "speed": 1.8, "amp": 18},
-    "thinking":  {"primary": "#FFD600", "secondary": "#F57F17", "core": "#FFFFFF", "accent": "#3E2700", "speed": 4.0, "amp": 6},
-    "speaking":  {"primary": "#E65100", "secondary": "#BF360C", "core": "#FFAB91", "accent": "#3E0000", "speed": 1.2, "amp": 30},
-    "done":      {"primary": "#2E7D32", "secondary": "#1B5E20", "core": "#FFD600", "accent": "#003300", "speed": 0.5, "amp": 4},
+    "idle":      {"primary": "#1565C0", "secondary": "#0D47A1", "core": "#82B1FF", "accent": "#002171", "outer": "#B71C1C", "speed": 0.3, "amp": 2},
+    "listening": {"primary": "#1565C0", "secondary": "#0D47A1", "core": "#82B1FF", "accent": "#002171", "outer": "#D32F2F", "speed": 1.8, "amp": 18},
+    "thinking":  {"primary": "#FFD600", "secondary": "#F57F17", "core": "#FFFFFF", "accent": "#3E2700", "outer": "#FF6F00", "speed": 4.0, "amp": 6},
+    "speaking":  {"primary": "#E65100", "secondary": "#BF360C", "core": "#FFAB91", "accent": "#3E0000", "outer": "#FF1744", "speed": 1.2, "amp": 30},
+    "done":      {"primary": "#2E7D32", "secondary": "#1B5E20", "core": "#FFD600", "accent": "#003300", "outer": "#00E676", "speed": 0.5, "amp": 4},
 }
 
 
@@ -1792,34 +1792,34 @@ class JarvisHUD:
         self.root.configure(bg='black')
         self.root.wm_attributes("-transparentcolor", "black")
 
-        self.canvas = tk.Canvas(root, width=180, height=240, bg='black', highlightthickness=0)
+        self.canvas = tk.Canvas(root, width=220, height=260, bg='black', highlightthickness=0)
         self.canvas.pack()
 
-        self.title_label = tk.Label(root, text="J.A.R.V.I.S.", font=("Consolas", 11, "bold"),
-                                     fg="#1B5E20", bg="black", justify="center")
-        self.title_label.pack(pady=(4, 0))
+        self.title_label = tk.Label(root, text="J.A.R.V.I.S.", font=("Segoe UI", 12, "bold"),
+                                     fg="#1565C0", bg="black", justify="center")
+        self.title_label.pack(pady=(6, 0))
 
         self.status_label = tk.Label(root, text="J.A.R.V.I.S. // STANDBY",
-                                      font=("Consolas", 9), fg="#1B5E20", bg="black",
+                                      font=("Consolas", 9), fg="#1565C0", bg="black",
                                       justify="center", wraplength=460)
         self.status_label.pack(pady=(0, 2))
 
         self.subtitle_label = tk.Label(root, text="", font=("Segoe UI", 11),
                                         fg="#FFFFFF", bg="black", justify="center", wraplength=460)
-        self.subtitle_label.pack(pady=(4, 8), side=tk.BOTTOM)
+        self.subtitle_label.pack(pady=(4, 10), side=tk.BOTTOM)
 
-        self.num_bars = 48
+        self.num_bars = 60
         self.bar_heights = [2] * self.num_bars
         self.bar_targets = [2] * self.num_bars
         self.rotation_angle = 0
         self.wave_offset = 0
 
         self.particles = []
-        for _ in range(12):
+        for _ in range(18):
             angle = random.uniform(0, 360)
-            radius = random.uniform(30, 70)
-            speed = random.uniform(0.2, 0.6)
-            size = random.uniform(1, 2)
+            radius = random.uniform(35, 85)
+            speed = random.uniform(0.15, 0.5)
+            size = random.uniform(0.8, 2.2)
             self.particles.append([angle, radius, speed, size])
 
         self.pulse_waves = []
@@ -1828,7 +1828,7 @@ class JarvisHUD:
         self.mode = "hidden"
 
         palette = STATE_PALETTES["idle"]
-        self.cur_colors = {k: hex_to_rgb(palette[k]) for k in ("primary", "secondary", "core", "accent")}
+        self.cur_colors = {k: hex_to_rgb(palette[k]) for k in ("primary", "secondary", "core", "accent", "outer")}
         self.tgt_colors = dict(self.cur_colors)
         self.cur_speed = palette["speed"]
         self.tgt_speed = palette["speed"]
@@ -1878,17 +1878,17 @@ class JarvisHUD:
         self.current_state = state
         self.status_label.config(text=text, fg=color)
         palette = STATE_PALETTES.get(state, STATE_PALETTES["idle"])
-        self.tgt_colors = {k: hex_to_rgb(palette[k]) for k in ("primary", "secondary", "core", "accent")}
+        self.tgt_colors = {k: hex_to_rgb(palette[k]) for k in ("primary", "secondary", "core", "accent", "outer")}
         self.tgt_speed = palette["speed"]
         self.tgt_amp = palette["amp"]
         state_colors = {
-            "idle": "#1B5E20",
+            "idle": "#1565C0",
             "listening": "#1565C0",
             "thinking": "#F57F17",
             "speaking": "#E65100",
             "done": "#2E7D32"
         }
-        self.title_label.config(fg=state_colors.get(state, "#B71C1C"))
+        self.title_label.config(fg=state_colors.get(state, "#1565C0"))
 
     def trigger_wake(self):
         if self.mode == "hidden":
@@ -2078,7 +2078,7 @@ class JarvisHUD:
         self.last_frame_time = now
 
         lerp_rate = 1.0 - math.pow(0.001, dt)
-        for k in ("primary", "secondary", "core", "accent"):
+        for k in ("primary", "secondary", "core", "accent", "outer"):
             cr, cg, cb = self.cur_colors[k]
             tr, tg, tb = self.tgt_colors[k]
             self.cur_colors[k] = (cr + (tr - cr) * lerp_rate, cg + (tg - cg) * lerp_rate, cb + (tb - cb) * lerp_rate)
@@ -2089,17 +2089,35 @@ class JarvisHUD:
         secondary = rgb_to_hex(*self.cur_colors["secondary"])
         core = rgb_to_hex(*self.cur_colors["core"])
         accent = rgb_to_hex(*self.cur_colors["accent"])
+        outer = rgb_to_hex(*self.cur_colors["outer"])
         speed = self.cur_speed
         amp = self.cur_amp
 
         self.canvas.delete("wave")
 
-        width = 180
-        height = 240
+        width = 220
+        height = 260
         center_x = width / 2
-        center_y = 105
+        center_y = 115
 
-        outer_r = 80
+        # LAYER 0: Outer tick marks (clock face)
+        tick_r_outer = 98
+        tick_r_inner = 92
+        for i in range(60):
+            a = (i / 60) * 360 + self.rotation_angle * 0.1
+            rad = math.radians(a)
+            is_major = (i % 5 == 0)
+            r_in = tick_r_inner if is_major else tick_r_inner + 2
+            r_out = tick_r_outer if is_major else tick_r_outer - 3
+            x1 = center_x + math.cos(rad) * r_in
+            y1 = center_y + math.sin(rad) * r_in
+            x2 = center_x + math.cos(rad) * r_out
+            y2 = center_y + math.sin(rad) * r_out
+            w = 2 if is_major else 1
+            self.canvas.create_line(x1, y1, x2, y2, fill=outer if is_major else accent, width=w, tags="wave")
+
+        # LAYER 1: Outer ring - dashed circle, rotating slowly
+        outer_r = 85
         num_outer = 36
         for i in range(num_outer):
             if i % 2 == 0:
@@ -2112,9 +2130,10 @@ class JarvisHUD:
             y1 = center_y + math.sin(rad1) * outer_r
             x2 = center_x + math.cos(rad2) * outer_r
             y2 = center_y + math.sin(rad2) * outer_r
-            self.canvas.create_line(x1, y1, x2, y2, fill=secondary, width=1, tags="wave")
+            self.canvas.create_line(x1, y1, x2, y2, fill=outer, width=1, tags="wave")
 
-        mid_r = 62
+        # LAYER 2: Middle ring - 12 segments, counter-rotating
+        mid_r = 68
         num_segments = 12
         for i in range(num_segments):
             a1 = (i / num_segments) * 360 - self.rotation_angle * 0.6
@@ -2127,22 +2146,35 @@ class JarvisHUD:
             y2 = center_y + math.sin(rad2) * mid_r
             self.canvas.create_line(x1, y1, x2, y2, fill=secondary, width=2, tags="wave")
 
-        inner_r = 48
-        self.canvas.create_oval(center_x - inner_r, center_y - inner_r,
-                                center_x + inner_r, center_y + inner_r,
-                                outline=secondary, width=1, tags="wave")
+        # LAYER 3: Inner ring - rotating thin circle
+        inner_r = 52
+        a_start = self.rotation_angle * 0.15
+        self.canvas.create_arc(center_x - inner_r, center_y - inner_r,
+                               center_x + inner_r, center_y + inner_r,
+                               start=a_start, extent=180, outline=secondary, width=1, style="arc", tags="wave")
+        self.canvas.create_arc(center_x - inner_r, center_y - inner_r,
+                               center_x + inner_r, center_y + inner_r,
+                               start=a_start + 180, extent=180, outline=accent, width=1, style="arc", tags="wave")
 
-        spoke_inner = 20
-        spoke_outer = 46
-        for i in range(8):
-            spoke_angle = math.radians(self.rotation_angle + i * 45)
+        # LAYER 4: Decorative data ring (static thin circle)
+        data_r = 78
+        self.canvas.create_oval(center_x - data_r, center_y - data_r,
+                                center_x + data_r, center_y + data_r,
+                                outline=accent, width=1, dash=(2, 4), tags="wave")
+
+        # LAYER 5: 12 spoke lines from center outward
+        spoke_inner = 22
+        spoke_outer = 50
+        for i in range(12):
+            spoke_angle = math.radians(self.rotation_angle + i * 30)
             sx1 = center_x + math.cos(spoke_angle) * spoke_inner
             sy1 = center_y + math.sin(spoke_angle) * spoke_inner
             sx2 = center_x + math.cos(spoke_angle) * spoke_outer
             sy2 = center_y + math.sin(spoke_angle) * spoke_outer
             self.canvas.create_line(sx1, sy1, sx2, sy2, fill=accent, width=1, tags="wave")
 
-        base_radius = 26
+        # LAYER 6: 60 audio-reactive bars around the core
+        base_radius = 28
         for i in range(self.num_bars):
             angle = (i / self.num_bars) * 360
             rad = math.radians(angle)
@@ -2153,7 +2185,7 @@ class JarvisHUD:
             else:
                 self.bar_targets[i] = 2 + math.sin(self.wave_offset + i * 0.4) * amp
 
-            self.bar_heights[i] += (self.bar_targets[i] - self.bar_heights[i]) * 0.4
+            self.bar_heights[i] += (self.bar_targets[i] - self.bar_heights[i]) * 0.35
             h = self.bar_heights[i]
 
             x_inner = center_x + math.cos(rad) * base_radius
@@ -2163,6 +2195,7 @@ class JarvisHUD:
 
             self.canvas.create_line(x_inner, y_inner, x_outer, y_outer, fill=primary, width=1, tags="wave")
 
+        # LAYER 7: 18 floating particles
         for p in self.particles:
             p[0] += p[2] * speed * 0.3
             if p[0] > 360:
@@ -2174,16 +2207,17 @@ class JarvisHUD:
             self.canvas.create_oval(px - ps, py - ps, px + ps, py + ps,
                                     fill=core, outline="", tags="wave")
 
+        # LAYER 8: Pulse waves (listening, speaking, done)
         if self.current_state in ["listening", "speaking", "done"]:
             if random.random() < 0.08:
                 self.pulse_waves.append([0])
         for pw in self.pulse_waves[:]:
             pw[0] += 1.2
-            if pw[0] > 90:
+            if pw[0] > 95:
                 self.pulse_waves.remove(pw)
                 continue
             pr = pw[0]
-            fade = max(0.0, 1.0 - pr / 90)
+            fade = max(0.0, 1.0 - pr / 95)
             fade_sq = fade * fade
             r = int(self.cur_colors["secondary"][0] * fade_sq + self.cur_colors["accent"][0] * (1 - fade_sq))
             g = int(self.cur_colors["secondary"][1] * fade_sq + self.cur_colors["accent"][1] * (1 - fade_sq))
@@ -2192,30 +2226,68 @@ class JarvisHUD:
             self.canvas.create_oval(center_x - pr, center_y - pr, center_x + pr, center_y + pr,
                                     outline=pw_color, width=1, tags="wave")
 
-        core_pulse = 14 + math.sin(self.wave_offset * 2.5) * 3
+        # LAYER 9: Arc reactor core - filled circle with glow effect
+        core_pulse = 15 + math.sin(self.wave_offset * 2.5) * 3
         if self.current_state in ["listening", "speaking"]:
             core_pulse += CURRENT_AUDIO_AMPLITUDE * 0.15
 
-        for g in range(3):
-            gr = core_pulse + 6 + g * 4
+        # Outer glow layers (more for richer effect)
+        for g in range(4):
+            gr = core_pulse + 5 + g * 5
+            glow_alpha = 0.6 - g * 0.15
+            r = int(self.cur_colors["accent"][0] * glow_alpha)
+            gc = int(self.cur_colors["accent"][1] * glow_alpha)
+            b = int(self.cur_colors["accent"][2] * glow_alpha)
+            glow_color = rgb_to_hex(r, gc, b)
             self.canvas.create_oval(center_x - gr, center_y - gr,
                                     center_x + gr, center_y + gr,
-                                    outline=accent, width=1, tags="wave")
+                                    outline=glow_color, width=1, tags="wave")
 
+        # Core fill
         self.canvas.create_oval(center_x - core_pulse, center_y - core_pulse,
                                 center_x + core_pulse, center_y + core_pulse,
                                 fill=accent, outline=secondary, width=2, tags="wave")
 
-        dot_r = 5 + math.sin(self.wave_offset * 3) * 1.5
+        # Bright center dot
+        dot_r = 6 + math.sin(self.wave_offset * 3) * 2
         self.canvas.create_oval(center_x - dot_r, center_y - dot_r,
                                 center_x + dot_r, center_y + dot_r,
                                 fill=core, outline="", tags="wave")
 
-        self.canvas.create_oval(center_x - core_pulse + 3, center_y - core_pulse + 3,
-                                center_x + core_pulse - 3, center_y + core_pulse - 3,
+        # Inner bright ring
+        self.canvas.create_oval(center_x - core_pulse + 4, center_y - core_pulse + 4,
+                                center_x + core_pulse - 4, center_y + core_pulse - 4,
                                 outline=core, width=1, tags="wave")
 
-        self.canvas.create_text(center_x, height - 10, text="J.A.R.V.I.S.", anchor="center",
+        # LAYER 10: Corner HUD decorations (static frame)
+        frame_margin = 8
+        frame_len = 18
+        # Top-left
+        self.canvas.create_line(frame_margin, frame_margin, frame_margin + frame_len, frame_margin, fill=outer, width=1, tags="wave")
+        self.canvas.create_line(frame_margin, frame_margin, frame_margin, frame_margin + frame_len, fill=outer, width=1, tags="wave")
+        # Top-right
+        self.canvas.create_line(width - frame_margin, frame_margin, width - frame_margin - frame_len, frame_margin, fill=outer, width=1, tags="wave")
+        self.canvas.create_line(width - frame_margin, frame_margin, width - frame_margin, frame_margin + frame_len, fill=outer, width=1, tags="wave")
+        # Bottom-left
+        self.canvas.create_line(frame_margin, height - frame_margin - 20, frame_margin + frame_len, height - frame_margin - 20, fill=outer, width=1, tags="wave")
+        # Bottom-right
+        self.canvas.create_line(width - frame_margin, height - frame_margin - 20, width - frame_margin - frame_len, height - frame_margin - 20, fill=outer, width=1, tags="wave")
+
+        # LAYER 11: Small data readout text
+        data_text = "SYS:NOMINAL"
+        if self.current_state == "listening":
+            data_text = "MIC:ACTIVE"
+        elif self.current_state == "thinking":
+            data_text = "PROC:BUSY"
+        elif self.current_state == "speaking":
+            data_text = "TTS:OUTPUT"
+        elif self.current_state == "done":
+            data_text = "TASK:DONE"
+        self.canvas.create_text(width - 12, height - 24, text=data_text, anchor="e",
+                                fill=accent, font=("Consolas", 6), tags="wave")
+
+        # LAYER 12: J.A.R.V.I.S. text at center bottom
+        self.canvas.create_text(center_x, height - 12, text="J.A.R.V.I.S.", anchor="center",
                                 fill=secondary, font=("Consolas", 7, "bold"), tags="wave")
 
         self.rotation_angle += speed

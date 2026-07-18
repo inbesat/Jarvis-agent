@@ -91,7 +91,12 @@ WORKSPACE_SLUG = os.getenv("WORKSPACE_SLUG", "jarvis")
 ANYTHING_API_URL = f"http://localhost:3001/api/v1/workspace/{WORKSPACE_SLUG}/chat"
 
 SERPAPI_API_KEY = os.getenv("SERPAPI_API_KEY")
-# (Initialize other keys here using os.getenv as well)
+NEWS_API_KEY = os.getenv("NEWSDATA_API_KEY")
+NASA_API_KEY = os.getenv("NASA_API_KEY")
+REST_COUNTRIES_API_KEY = os.getenv("REST_COUNTRIES_API_KEY")
+NOTION_TOKEN = os.getenv("NOTION_TOKEN")
+NOTION_DATABASE_ID = os.getenv("NOTION_DATABASE_ID")
+OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
 HF_TOKEN = os.getenv("HF_TOKEN")
 api = HfApi(token=HF_TOKEN)
 
@@ -138,14 +143,20 @@ LOG_FILE = "jarvis_chat_log.txt"
 MEMORY_API = "http://localhost:5050/api"
 
 def save_to_memory(user_text, ai_text):
-    with open(LOG_FILE, "a", encoding="utf-8") as f:
-        f.write(f"User: {user_text}\n")
-        f.write(f"Jarvis: {ai_text}\n\n")
+    if user_text and ai_text:
+        with open(LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(f"User: {user_text}\n")
+            f.write(f"Jarvis: {ai_text}\n\n")
     try:
-        requests.post(f"{MEMORY_API}/chat_history", json={"role": "user", "content": user_text}, timeout=2)
-        requests.post(f"{MEMORY_API}/chat_history", json={"role": "assistant", "content": ai_text}, timeout=2)
+        if user_text:
+            requests.post(f"{MEMORY_API}/chat_history", json={"role": "user", "content": user_text}, timeout=3)
     except Exception:
-        pass
+        print("[ MEMORY ] Failed to save user message to memory server")
+    try:
+        if ai_text:
+            requests.post(f"{MEMORY_API}/chat_history", json={"role": "assistant", "content": ai_text}, timeout=3)
+    except Exception:
+        print("[ MEMORY ] Failed to save assistant message to memory server")
 
 def get_recent_memory():
     if not os.path.exists(LOG_FILE):
@@ -379,6 +390,7 @@ ACTIONS (use ONLY these):
 {"action":"click_link","text":"link text"}
 {"action":"open_url","url":"https://..."}
 {"action":"wait","seconds":2}
+{"action":"alt_tab"}
 {"action":"done","message":"what was accomplished"}
 
 RULES (violation = failure):
@@ -392,23 +404,54 @@ RULES (violation = failure):
 8. After the LAST action of the task, ALWAYS output done immediately.
 9. If the task is "open X and do Y", the actions are: open X -> wait -> do Y -> done.
 10. For messages: type text THEN press enter THEN done.
+11. For "scroll and do X": scroll first, wait 1s, then do X. Do NOT skip the scroll.
+12. For "open Nth item" or "click 2nd video": count items in the accessibility tree and click the Nth one.
+13. For NOTEPAD: after opening, use {"action":"hotkey","keys":["ctrl","n"]} to clear the buffer before typing. Then type the article text. Press enter between paragraphs.
+14. For CALCULATOR: Windows Calculator accepts keyboard input. Type the expression (e.g. "512*8") and press enter. Then read the display from the screenshot.
+15. To SWITCH between open apps: use {"action":"alt_tab"} to go back to the previous window.
+16. For INSTAGRAM DMs: search box is at the top-left. Find the search textbox, type the person's name, press enter, then click on the first chat result to open, find the message input at the bottom, type, and press enter.
+17. For YOUTUBE video ads: if a video ad is playing (you see "Ad" or "Skip" overlay), do NOT click anything. Simply output {"action":"done","message":"Video is playing with an ad."} and stop.
 
-CRITICAL - YOUTUBE SEARCH + CLICK LATEST VIDEO:
-To search and open the latest video on YouTube:
+CRITICAL - YOUTUBE (search, click Nth video, history, ads):
+SEARCH + CLICK:
 Step 1: {"action":"open_url","url":"https://youtube.com/results?search_query=QUERY"}
 Step 2: {"action":"wait","seconds":3}
-Step 3: {"action":"click_link","text":"first video title from search results"}
-Step 4: {"action":"done","message":"Opened latest video for QUERY"}
-The accessibility tree will show video titles after search loads. Click the FIRST video result.
+Step 3: Count video results in the accessibility tree. To click the Nth video, find its title text and click_link it.
+Step 4: {"action":"done","message":"Opened video N for QUERY"}
+If an ad plays (you see "Ad" overlay), just output done - do NOT click anything.
+
+CLICK NTH VIDEO ON CURRENT PAGE:
+If you are already on YouTube with search results or a channel page:
+1. Look at the accessibility tree. Find all video titles (they appear as link elements).
+2. To open the 2nd video, find the 2nd video title in the list and use click_link on it.
+3. To open the 3rd video, find the 3rd title, etc.
+
+YOUTUBE HISTORY:
+Step 1: {"action":"open_url","url":"https://www.youtube.com/feed/history"}
+Step 2: {"action":"wait","seconds":3}
+Step 3: {"action":"done","message":"Opened YouTube history page"}
 
 CRITICAL - HOW TO SEND MESSAGES (Instagram/Telegram/WhatsApp):
 1. The chat list is in the LEFT SIDEBAR. Use the accessibility tree to find the person's name.
 2. {"action":"click_link","text":"PersonName"} to open their chat.
 3. {"action":"wait","seconds":2} for chat to load.
-4. Find the MESSAGE INPUT field - it is at the BOTTOM of the screen. Use accessibility tree to find the textbox/input field at the bottom.
-5. {"action":"type","text":"your message"}
-6. {"action":"press_key","key":"enter"}
-7. {"action":"done","message":"Sent message to PersonName"}
+4. If the search box is visible instead of the chat list, type the person's name and press enter first.
+5. Look at the accessibility tree for the MESSAGE INPUT field at the BOTTOM of the screen. It appears as a textbox, edit, or text input element.
+6. {"action":"type","text":"your message"}
+7. {"action":"press_key","key":"enter"}
+8. {"action":"done","message":"Sent message to PersonName"}
+
+CRITICAL - SCROLLING + MULTI-STEP:
+For "scroll down and click the second message":
+Step 1: {"action":"scroll","amount":-500}
+Step 2: {"action":"wait","seconds":1}
+Step 3: Look at the updated accessibility tree after scrolling.
+Step 4: {"action":"click_link","text":"<second item title from tree>"}
+Step 5: {"action":"done","message":"Scrolled and opened second item"}
+
+For "scroll to the bottom of the page":
+Use multiple scroll actions: scroll down repeatedly until you see the end of content.
+{"action":"scroll","amount":-500} then wait, then repeat as needed.
 
 CRITICAL - SCREEN UNDERSTANDING (VISION):
 When the user asks "what's on screen" or "describe the screen":
@@ -418,8 +461,8 @@ Be specific - mention actual text, titles, colors, layout you observe.
 If the task asks you to describe the screen, output: {"action":"done","message":"<detailed description of what you see>"}
 
 WEBSITE KNOWLEDGE:
-- YOUTUBE: Left sidebar: Home, Shorts, Subscriptions, Library. Search bar top. Videos show as thumbnails with titles. Click the FIRST video thumbnail after searching.
-- INSTAGRAM: Left sidebar has chat list. Click a person's name. Message input at BOTTOM. Press enter to send.
+- YOUTUBE: Left sidebar: Home, Shorts, Subscriptions, Library, History. Search bar top. Videos show as thumbnails with titles. To click the Nth video, count the video titles in the accessibility tree and click_link the Nth one. History is at youtube.com/feed/history.
+- INSTAGRAM: Left sidebar has chat list. Click a person's name to open chat. Message input at BOTTOM of the chat area - look for textbox/input in the accessibility tree. Press enter to send.
 - TELEGRAM: Left sidebar has chat list. Click a person's name. Message input at BOTTOM. Press enter to send.
 - WHATSAPP WEB: Left sidebar has chat list. Click a person's name. Message input at BOTTOM. Press enter to send.
 - NOTEPAD: Full text area. Just type after opening.
@@ -433,11 +476,11 @@ Step 2: {"action":"wait","seconds":3}
 Step 3: {"action":"type","text":"hello world"}
 Step 4: {"action":"done","message":"Written hello world in Notepad"}
 
-Task: "search youtube for mrbeast and open the latest video"
-Step 1: {"action":"open_url","url":"https://youtube.com/results?search_query=mrbeast+latest+video"}
+Task: "search youtube for mrbeast and open the second video"
+Step 1: {"action":"open_url","url":"https://youtube.com/results?search_query=mrbeast"}
 Step 2: {"action":"wait","seconds":3}
-Step 3: {"action":"click_link","text":"MrBeast"}
-Step 4: {"action":"done","message":"Opened MrBeast latest video on YouTube"}
+Step 3: {"action":"click_link","text":"<second video title from tree>"}
+Step 4: {"action":"done","message":"Opened second MrBeast video on YouTube"}
 
 Task: "open instagram and message hi to John"
 Step 1: {"action":"open_app","app_name":"instagram"}
@@ -448,13 +491,56 @@ Step 5: {"action":"type","text":"hi"}
 Step 6: {"action":"press_key","key":"enter"}
 Step 7: {"action":"done","message":"Sent hi to John on Instagram"}
 
-Task: "scroll down"
+Task: "scroll down and open the second chat"
 Step 1: {"action":"scroll","amount":-500}
-Step 2: {"action":"done","message":"Scrolled down"}
+Step 2: {"action":"wait","seconds":1}
+Step 3: {"action":"click_link","text":"<second chat name from tree>"}
+Step 4: {"action":"done","message":"Scrolled and opened second chat"}
+
+Task: "open youtube history"
+Step 1: {"action":"open_url","url":"https://www.youtube.com/feed/history"}
+Step 2: {"action":"wait","seconds":3}
+Step 3: {"action":"done","message":"Opened YouTube history"}
+
+Task: "open Notepad and write an article about Mahatma Gandhi"
+Step 1: {"action":"open_app","app_name":"notepad"}
+Step 2: {"action":"wait","seconds":3}
+Step 3: {"action":"hotkey","keys":["ctrl","n"]}
+Step 4: {"action":"wait","seconds":0.5}
+Step 5: {"action":"type","text":"Mahatma Gandhi was the leader of India's non-violent independence movement against British rule. Born on October 2, 1869, he pioneered the philosophy of Satyagraha - non-violent resistance. His efforts led to India's independence in 1947."}
+Step 6: {"action":"done","message":"Written article about Mahatma Gandhi in Notepad"}
+
+Task: "open Notepad, type 'The final total value is', then open Calculator, calculate 512 times 8, read the answer, switch back to Notepad, and type that answer"
+Step 1: {"action":"open_app","app_name":"notepad"}
+Step 2: {"action":"wait","seconds":3}
+Step 3: {"action":"type","text":"The final total value is "}
+Step 4: {"action":"open_app","app_name":"calculator"}
+Step 5: {"action":"wait","seconds":2}
+Step 6: {"action":"type","text":"512*8"}
+Step 7: {"action":"press_key","key":"enter"}
+Step 8: {"action":"wait","seconds":2}
+Step 9: Read the calculator display from the new screenshot (shows 4096).
+Step 10: {"action":"alt_tab"}
+Step 11: {"action":"wait","seconds":1}
+Step 12: {"action":"type","text":"4096"}
+Step 13: {"action":"done","message":"Completed pipeline: typed total, calculated 512*8=4096, filled answer"}
+
+Task: "go to the washroom, open carrom"
+Step 1: {"action":"open_app","app_name":"chrome"}
+Step 2: {"action":"wait","seconds":2}
+Step 3: {"action":"open_url","url":"https://www.google.com/search?q=play+carrom+online"}
+Step 4: {"action":"done","message":"AFK Protocol: Opened carrom for you. Enjoy!"}
 
 Task: "what's on my screen"
 Step 1: Look at the screenshot image provided.
 Step 2: {"action":"done","message":"<describe everything you see on screen>"}
+
+Task: "search the web for the latest tech news and type the top headline into Notepad"
+Step 1: I will search the web internally using my knowledge and then:
+Step 2: {"action":"open_app","app_name":"notepad"}
+Step 3: {"action":"wait","seconds":3}
+Step 4: {"action":"type","text":"<top tech headline from my knowledge>"}
+Step 5: {"action":"done","message":"Searched tech news and typed top headline into Notepad"}
 
 Output ONLY one raw JSON. If the task is complete, output done NOW."""
 
@@ -585,10 +671,6 @@ Output ONLY one raw JSON. If the task is complete, output done NOW."""
             elif action == "type":
                 text_to_type = command.get("text", "")
                 if text_to_type:
-                    # Click center of screen first to ensure focus is on the right window
-                    sw, sh = pyautogui.size()
-                    pyautogui.click(sw // 2, sh // 2)
-                    time.sleep(0.3)
                     pyautogui.write(text_to_type, interval=0.03)
                 time.sleep(0.5)
 
@@ -754,10 +836,15 @@ def _save_tasks(tasks):
         json.dump(tasks, f, indent=2)
 
 def add_task(text):
-    """Add a task to the persistent task list."""
+    """Add a task to the persistent task list AND memory server."""
     tasks = _load_tasks()
-    tasks.append({"task": text, "done": False, "created": datetime.now().strftime("%Y-%m-%d %H:%M")})
+    entry = {"task": text, "done": False, "created": datetime.now().strftime("%Y-%m-%d %H:%M")}
+    tasks.append(entry)
     _save_tasks(tasks)
+    try:
+        requests.post(f"{MEMORY_API}/tasks", json={"title": text, "description": "", "status": "pending", "priority": "medium"}, timeout=2)
+    except Exception:
+        print("[ MEMORY ] Failed to sync task to memory server")
     return f"Task added: \"{text}\". You now have {len([t for t in tasks if not t['done']])} pending tasks."
 
 def list_tasks():
@@ -777,6 +864,17 @@ def complete_task(text):
         if not t["done"] and text_lower in t["task"].lower():
             t["done"] = True
             _save_tasks(tasks)
+            try:
+                # Sync to memory server: find task by title and update
+                res = requests.get(f"{MEMORY_API}/tasks", timeout=2)
+                if res.ok:
+                    all_tasks = res.json()
+                    for mt in all_tasks:
+                        if mt.get("title") and text_lower in mt["title"].lower():
+                            requests.put(f"{MEMORY_API}/tasks/{mt['id']}", json={"status": "done"}, timeout=2)
+                            break
+            except Exception:
+                print("[ MEMORY ] Failed to sync task completion to memory server")
             remaining = len([x for x in tasks if not x["done"]])
             return f"Done: \"{t['task']}\". {remaining} tasks remaining."
     return f"Couldn't find a task matching \"{text}\"."
@@ -1364,7 +1462,7 @@ def get_ai_response(question, base64_image=None):
                 search_query = search_query.replace(cleanup, "").strip()
             break
 
-    agentic_keywords = ["click", "type", "open", "navigate", "go to", "write", "chrome", "browser", "youtube", "google", "scroll", "link"]
+    agentic_keywords = ["click", "type", "open", "navigate", "go to", "write", "chrome", "browser", "youtube", "google", "scroll", "link", "chat", "message", "send", "dm", "history"]
     # Remove "google" from agentic if it's part of "through google" search intent
     effective_agentic = [k for k in agentic_keywords if not (search_via_google and k == "google")]
     is_agentic_task = any(word in q_lower for word in effective_agentic) and not is_pure_question and not search_via_google
@@ -1381,7 +1479,7 @@ def get_ai_response(question, base64_image=None):
             today = datetime.now().strftime("%A, %B %d, %Y")
             extra_context = f"""DAILY BRIEFING DATA for {today}:
 WEATHER: {weather}
-TOP NEWS: {recent}
+TOP NEWS: {news}
 RECENT CONVERSATIONS & TASKS:
 {recent}
 Generate a concise executive morning briefing. Cover: 1) Weather summary 2) Top 3 news headlines 3) Any pending tasks or reminders from recent conversations. Be direct and professional. No markdown."""
@@ -1664,6 +1762,19 @@ Generate a concise executive morning briefing. Cover: 1) Weather summary 2) Top 
         if any(w in q_lower for w in ["background tasks", "show tasks running", "what's running", "list background"]):
             return get_background_tasks()
 
+        # --- AFK PROTOCOL (e.g., "going to the washroom, open carrom") ---
+        afk_words = ["going to", "washroom", "bathroom", "be right back", "brb", "afk"]
+        if any(w in q_lower for w in afk_words):
+            # Extract what to open
+            open_target = question
+            for cleanup in afk_words + ["jarvis", "open", "please", "for me", "i am", "im"]:
+                open_target = open_target.replace(cleanup, "").strip()
+            if open_target:
+                import webbrowser as wb_afk
+                wb_afk.open_new_tab(f"https://www.google.com/search?q=play+{urllib.parse.quote(open_target)}+online")
+                return f"AFK Protocol: Enjoy {open_target}! I'll be here when you're back."
+            return "AFK Protocol: I'll be here."
+
         coding_triggers = ["code", "analyze", "script", "complex", "debug", "write program", "vscode", "notepad"]
         vision_triggers = ["what's on screen", "what is on screen", "describe the screen", "what do you see", "what can you see", "look at my screen", "tell me about the video", "tell me about the screen"]
         use_agent_loop = is_agentic_task or any(w in q_lower for w in coding_triggers) or any(w in q_lower for w in vision_triggers)
@@ -1672,7 +1783,6 @@ Generate a concise executive morning briefing. Cover: 1) Weather summary 2) Top 
         if any(w in q_lower for w in ["calculate", "+", "-", "*", "/"]) or ("what is" in q_lower and re.search(r'\d', q_lower)):
             math_result = fast_math_calculator(question)
             if math_result:
-                save_to_memory(question, math_result)
                 return math_result
 
         # --- FAST LANE: WEB NAVIGATION (only for simple "open site" commands) ---
@@ -1689,8 +1799,22 @@ Generate a concise executive morning briefing. Cover: 1) Weather summary 2) Top 
             if is_simple_open:
                 web_result = fast_web_navigator(question)
                 if web_result:
-                    save_to_memory(question, web_result)
                     return web_result
+
+        # --- FAST LANE: YOUTUBE HISTORY ---
+        if any(w in q_lower for w in ["youtube history", "watch history", "my history", "video history", "open history"]) and "youtube" in q_lower:
+            try:
+                chrome_paths_hist = [r"C:\Program Files\Google\Chrome\Application\chrome.exe", r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"]
+                browser_hist = webbrowser
+                for cp in chrome_paths_hist:
+                    if os.path.exists(cp):
+                        webbrowser.register('chrome_hist', None, webbrowser.BackgroundBrowser(cp))
+                        browser_hist = webbrowser.get('chrome_hist')
+                        break
+                browser_hist.open_new_tab("https://www.youtube.com/feed/history")
+            except Exception:
+                webbrowser.open_new_tab("https://www.youtube.com/feed/history")
+            return "Instantly opened YouTube history"
 
         # --- FAST LANE: YOUTUBE VIDEO SEARCH ---
         if "video" in q_lower and any(w in q_lower for w in ["open", "play", "watch", "show"]):
@@ -1718,24 +1842,30 @@ Generate a concise executive morning briefing. Cover: 1) Weather summary 2) Top 
             print("[ SYSTEM: ONLINE ] Routing to Universal Action Model Loop...")
             active_image = base64_image if base64_image else capture_screen()
             ai_text = execute_hybrid_action(question, active_image)
-            save_to_memory(question, ai_text)
             return ai_text
 
-        elif groq_client is not None or groq_client_backup is not None:
+        elif groq_client is not None or groq_client_backup is not None or openrouter_client is not None or openrouter_client_backup is not None:
             selected_model = "llama-3.3-70b-versatile"
             user_content = "Memory:\n" + recent_memory + "\n\n" + extra_context + "User Command: " + question
             system_prompt = "You are Jarvis, a highly capable AI assistant. Date: " + current_time + ". IMPORTANT: If CONTEXT or LIVE WEB SEARCH RESULTS are provided, you MUST use them to answer. Do not tell the user to check a website. Extract the exact answer from the context. Be concise and direct. Do not use asterisks or markdown formatting in your response."
             ai_text = None
 
-            for fallback_client in [groq_client, groq_client_backup, openrouter_client, openrouter_client_backup]:
+            or_models = ["meta-llama/llama-3.3-70b-instruct", "qwen/qwen-2.5-72b-instruct", "google/gemini-2.0-flash-001"]
+            fallback_chain = [
+                (groq_client, "llama-3.3-70b-versatile"),
+                (groq_client_backup, "llama-3.3-70b-versatile"),
+                (openrouter_client, or_models[0]),
+                (openrouter_client_backup, or_models[0]),
+            ]
+            for fallback_client, model_id in fallback_chain:
                 if fallback_client is None:
                     continue
                 try:
-                    response = fallback_client.chat.completions.create(model=selected_model, messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_content}], max_tokens=300)
+                    response = fallback_client.chat.completions.create(model=model_id, messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_content}], max_tokens=300)
                     ai_text = clean_ai_text(response.choices[0].message.content)
                     break
                 except Exception as e:
-                    print("[ API FALLBACK ] " + str(e)[:100] + " - trying next...")
+                    print(f"[ API FALLBACK: {model_id} on {type(fallback_client).__name__} ] {str(e)[:100]} - trying next...")
                     continue
 
             if ai_text is None:
@@ -1745,7 +1875,6 @@ Generate a concise executive morning briefing. Cover: 1) Weather summary 2) Top 
     else:
         ai_text = ask_anythingllm(question)
 
-    save_to_memory(question, ai_text)
     threading.Thread(target=sync_memory_to_anythingllm, args=(question, ai_text), daemon=True).start()
     return ai_text
 
@@ -1801,12 +1930,12 @@ class JarvisHUD:
 
         self.status_label = tk.Label(root, text="J.A.R.V.I.S. // STANDBY",
                                       font=("Consolas", 9), fg="#1565C0", bg="black",
-                                      justify="center", wraplength=460)
-        self.status_label.pack(pady=(0, 2))
+                                      justify="left", anchor="w")
+        self.status_label.pack(pady=(0, 2), fill=tk.X, padx=10)
 
-        self.subtitle_label = tk.Label(root, text="", font=("Segoe UI", 11),
-                                        fg="#FFFFFF", bg="black", justify="center", wraplength=460)
-        self.subtitle_label.pack(pady=(4, 10), side=tk.BOTTOM)
+        self.subtitle_label = tk.Label(root, text="", font=("Consolas", 10),
+                                        fg="#FFFFFF", bg="black", justify="left", anchor="w")
+        self.subtitle_label.pack(pady=(4, 10), side=tk.BOTTOM, fill=tk.X, padx=10)
 
         self.num_bars = 60
         self.bar_heights = [2] * self.num_bars
@@ -1924,6 +2053,7 @@ class JarvisHUD:
         microphone = sr.Microphone()
         self.is_processing = False
         self.last_command_time = 0
+        self.pending_text = ""
 
         def callback(recognizer, audio):
             if self.mode == "hidden" or self.is_processing:
@@ -1932,6 +2062,7 @@ class JarvisHUD:
             try:
                 self.root.after(0, lambda: self.update_subtitle("Listening..."))
                 text = recognizer.recognize_google(audio).lower()
+                self.pending_text = text
                 self.root.after(0, lambda: self.update_subtitle(text))
 
                 if any(w in text for w in ["close", "done", "hide", "sleep"]):
@@ -1939,10 +2070,8 @@ class JarvisHUD:
                 else:
                     self.is_processing = True
                     self.root.after(0, lambda: self.update_status("listening", "WAITING...", "#1565C0"))
-                    self.root.after(0, lambda: self.update_subtitle('"' + text + '" — executing in 3s...'))
-                    # Wait 3 seconds before executing to confirm no more speech
-                    import time
-                    time.sleep(3)
+                    self.root.after(0, lambda: self.update_subtitle(text + "  [executing...]"))
+                    time.sleep(1.5)
                     self.root.after(0, lambda: self.process_command(text))
             except sr.UnknownValueError:
                 self.root.after(0, lambda: self.update_subtitle("..."))
@@ -1950,11 +2079,12 @@ class JarvisHUD:
                 pass
 
         with microphone as source:
-            recognizer.adjust_for_ambient_noise(source, duration=1)
-            recognizer.pause_threshold = 3.0
+            recognizer.adjust_for_ambient_noise(source, duration=0.5)
+            recognizer.pause_threshold = 1.5
+            recognizer.phrase_time_limit = 8
 
         recognizer.listen_in_background(microphone, callback)
-        print("Jarvis is now streaming audio to HUD subtitles (3-Second Silence Delay Active).")
+        print("Jarvis is now streaming audio to HUD subtitles (1.5s Silence Delay Active).")
 
     def process_command(self, text):
         print("[ ROUTING ] Command: " + text)
@@ -1969,12 +2099,13 @@ class JarvisHUD:
 
         agentic_keywords = ["click", "type", "open", "navigate", "go to", "write", "chrome",
                             "browser", "youtube", "google", "scroll", "link", "chat", "message",
-                            "dm", "send"]
+                            "dm", "send", "history"]
         is_agentic = any(word in text.lower() for word in agentic_keywords) and not is_pure_question
 
         try:
             if is_agentic:
                 response = get_ai_response(text, self.current_screen)
+                save_to_memory(text, response)
                 is_agent_done = (response.startswith("Task completed:") or
                                  response == "Task manually interrupted by user.")
                 is_agent_failed = (response.startswith("Task failed") or
@@ -1983,14 +2114,15 @@ class JarvisHUD:
                 is_fast_lane = (response.startswith("Instantly opened") or
                                 response.startswith("Instantly searched") or
                                 response.startswith("Instantly routed") or
+                                response.startswith("Instantly opened YouTube") or
                                 response.startswith("AFK Protocol") or
                                 response.startswith("The answer is"))
 
                 if is_agent_done:
-                    completion_msg = response.replace("Task completed: ", "")
-                    self.root.after(0, lambda: self.update_subtitle(completion_msg))
+                    detail = response.replace("Task completed: ", "")
+                    self.root.after(0, lambda: self.update_subtitle(detail))
                     self.root.after(0, lambda: self.update_status("done", "TASK COMPLETE", "#2E7D32"))
-                    self.speak_and_monitor(completion_msg)
+                    self.speak_and_monitor("Done.")
                     self.root.after(0, lambda: self.update_status("idle", "J.A.R.V.I.S. // STANDBY", "#1B5E20"))
                     self.current_screen = capture_screen()
                     self.is_processing = False
@@ -1999,7 +2131,8 @@ class JarvisHUD:
                 if is_fast_lane or is_agent_failed:
                     self.root.after(0, lambda: self.update_subtitle(response))
                     self.root.after(0, lambda: self.update_status("done", "DONE", "#2979FF"))
-                    self.speak_and_monitor(response)
+                    speak_text = "Done." if is_fast_lane else "Something went wrong."
+                    self.speak_and_monitor(speak_text)
                     self.root.after(0, lambda: self.update_status("idle", "J.A.R.V.I.S. // STANDBY", "#1B5E20"))
                     self.current_screen = capture_screen()
                     self.is_processing = False
@@ -2015,6 +2148,7 @@ class JarvisHUD:
 
             response = get_ai_response(text, self.current_screen)
             print("[ ROUTING ] Response: " + str(response)[:120])
+            save_to_memory(text, response)
 
             self.root.after(0, lambda: self.update_status("speaking", "SPEAKING // SAY STOP", "#FF6D00"))
             self.root.after(0, lambda: self.update_subtitle(response))

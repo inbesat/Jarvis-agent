@@ -11,6 +11,14 @@ from pathlib import Path
 from flask import Flask, jsonify, request, send_from_directory
 
 app = Flask(__name__)
+
+@app.after_request
+def add_cors(response):
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    return response
+
 DATA_DIR = Path("./jarvis_memory_data")
 DATA_DIR.mkdir(exist_ok=True)
 
@@ -235,7 +243,7 @@ def delete_task(item_id):
 # --- Search across all sections ---
 @app.route("/api/search", methods=["GET"])
 def search_all():
-    q = request.json.get("q", "").lower() if request.json else request.args.get("q", "").lower()
+    q = request.args.get("q", "").lower()
     results = {}
     for section_name in SECTIONS:
         items = load_section(section_name)

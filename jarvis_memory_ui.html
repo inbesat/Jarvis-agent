@@ -205,7 +205,7 @@ body{font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;background:
   <div class="sidebar-header">
     <div class="logo">JARVIS</div>
     <div class="logo-sub">Memory Core v4.0</div>
-    <div class="logo-status"><span class="dot"></span> Live Sync</div>
+    <div class="logo-status" id="connectionStatus"><span class="logo-dot"></span> Syncing...</div>
   </div>
   <div class="search-box">
     <input type="text" class="search-input" id="searchInput" placeholder="Search everything..." oninput="filterItems()">
@@ -265,6 +265,8 @@ let editingId=null;
 let searchQuery='';
 let refreshTimer=null;
 let lastDataHash='';
+let isLoading=false;
+let connectionLost=false;
 
 const bgCanvas=document.getElementById('bg-canvas');
 const bgCtx=bgCanvas.getContext('2d');
@@ -287,17 +289,40 @@ function toast(msg,type='info'){
 
 function hashData(d){return JSON.stringify(d)}
 
+function setConnectionStatus(connected){
+  const el=document.getElementById('connectionStatus');
+  if(connected){
+    el.innerHTML='<span class="logo-dot"></span> Live Sync';
+    el.style.color='var(--green)';
+  } else {
+    el.innerHTML='&#x26A0; Disconnected';
+    el.style.color='var(--red)';
+  }
+  connectionLost=!connected;
+}
+
 async function loadAll(silent){
+  if(isLoading)return;
+  isLoading=true;
   const oldHash=lastDataHash;
+  let allFailed=true;
   for(const section of ['chat_history','notes','future_ideas','todo_list','tasks']){
-    try{const res=await fetch(API+'/api/'+section);allData[section]=await res.json()}
+    try{const res=await fetch(API+'/api/'+section);if(res.ok){allData[section]=await res.json();allFailed=false}else{allData[section]=[]}}
     catch(e){allData[section]=[]}
     document.getElementById('count_'+section).textContent=allData[section].length;
   }
-  lastDataHash=hashData(allData);
-  if(!silent&&oldHash&&oldHash!==lastDataHash)toast('Memory synced','info');
+  if(allFailed){
+    setConnectionStatus(false);
+    if(!silent)toast('Cannot connect to memory server','error');
+  } else {
+    setConnectionStatus(true);
+    lastDataHash=hashData(allData);
+    if(!silent&&oldHash&&oldHash!==lastDataHash)toast('Memory synced','success');
+    if(oldHash&&oldHash!==lastDataHash&&currentSection==='chat_history'){renderSection();updateStats();return}
+  }
   renderSection();
   updateStats();
+  isLoading=false;
 }
 
 function updateStats(){
@@ -342,8 +367,13 @@ function renderSection(){
   const raw=allData[currentSection]||[];
   const items=getFiltered(raw);
 
+  if(connectionLost){
+    area.innerHTML='<div class="empty-state"><div class="icon">!</div><div class="sub">Memory server unreachable. Make sure jarvis_memory_server.py is running.</div></div>';
+    return;
+  }
+
   if(!raw.length){
-    const msgs={chat_history:'No conversations yet',notes:'No notes saved',future_ideas:'No ideas captured',todo_list:'No todos yet',tasks:'No tasks created'};
+    const msgs={chat_history:'No conversations yet - say something to Jarvis',notes:'No notes saved',future_ideas:'No ideas captured',todo_list:'No todos yet',tasks:'No tasks created'};
     area.innerHTML='<div class="empty-state"><div class="icon">{</div><div class="sub">'+(msgs[currentSection]||'No items')+'</div></div>';
     return;
   }
@@ -486,6 +516,7 @@ document.addEventListener('keydown',e=>{
   if(e.ctrlKey&&e.key==='n'){e.preventDefault();showAddModal()}
 });
 
+setConnectionStatus(false);
 loadAll(true);
 refreshTimer=setInterval(()=>loadAll(true),3000);
 </script>
